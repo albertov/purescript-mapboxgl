@@ -56,6 +56,7 @@ data Expr
   | At            Int Expr
   | Get           String (Maybe Expr)
   | Has           String (Maybe Expr)
+  | NotHas        String (Maybe Expr)
   | Length        Expr
   | Not           Expr
   | NotEq         Expr Expr
@@ -64,9 +65,11 @@ data Expr
   | Equal         Expr Expr
   | GreaterThan   Expr Expr
   | GreaterThanEq Expr Expr
+  | None          Expr Expr (Array Expr)
   | All           Expr Expr (Array Expr)
   | Any           Expr Expr (Array Expr)
   | In            Expr Expr (Array Expr) --Not defined in the spec but found in the wild
+  | NotIn         Expr Expr (Array Expr) --Not defined in the spec but found in the wild
   | Case          (Array (Tuple Expr Expr)) Expr
   | Coalesce      Expr Expr (Array Expr)
   | Match         Expr (Array (Tuple (NonEmpty Array Expr) Expr)) Expr
@@ -131,6 +134,8 @@ instance encodeExpr :: Encode Expr where
   encode (Get s (Just e)) = toForeign [toForeign "get", toForeign s, encode e]
   encode (Has s Nothing) = toForeign ["has", s]
   encode (Has s (Just e)) = toForeign [toForeign "has", toForeign s, encode e]
+  encode (NotHas s Nothing) = toForeign ["!has", s]
+  encode (NotHas s (Just e)) = toForeign [toForeign "!has", toForeign s, encode e]
   encode (Length e) = unOp "length" e
   encode (Not e) = unOp "!" e
   encode (NotEq a b) = binOp "!=" a b
@@ -139,9 +144,11 @@ instance encodeExpr :: Encode Expr where
   encode (Equal a b) = binOp "==" a b
   encode (GreaterThan a b) = binOp ">" a b
   encode (GreaterThanEq a b) = binOp ">=" a b
+  encode (None a b xs) = binOpArgs "none" a b xs
   encode (All a b xs) = binOpArgs "all" a b xs
   encode (Any a b xs) = binOpArgs "any" a b xs
   encode (In a b xs) = binOpArgs "in" a b xs
+  encode (NotIn a b xs) = binOpArgs "!in" a b xs
   encode (Case cs d) = toForeign  ([toForeign "case"] <> concatMap (\(Tuple c v) -> [encode c, encode v]) cs <> [encode d])
   encode (Coalesce a b xs) = toForeign  ([toForeign "coalesce", encode a, encode b] <> map encode xs)
   encode (Match i cs d) = toForeign  ([toForeign "match", encode i] <> concatMap encodeMatchCase cs <> [encode d])
@@ -217,6 +224,8 @@ instance decodeExpr :: Decode Expr where
     go "get" [prop, ob] = Get <$> decode prop <*> (Just <$> decode ob)
     go "has" [prop] = Has <$> decode prop <*> pure Nothing
     go "has" [prop, ob] = Has <$> decode prop <*> (Just <$> decode ob)
+    go "!has" [prop] = NotHas <$> decode prop <*> pure Nothing
+    go "!has" [prop, ob] = NotHas <$> decode prop <*> (Just <$> decode ob)
     go "length" xs = decodeUnOp "length" Length xs
     go "!" xs = decodeUnOp "!" Not xs
     go "!=" xs = decodeBinOp "!=" NotEq xs
@@ -226,8 +235,10 @@ instance decodeExpr :: Decode Expr where
     go ">" xs = decodeBinOp ">" GreaterThan xs
     go ">=" xs = decodeBinOp ">=" GreaterThanEq xs
     go "all" xs = decodeBinOpArgs "all" All xs
+    go "none" xs = decodeBinOpArgs "none" None xs
     go "any" xs = decodeBinOpArgs "any" Any xs
     go "in" xs = decodeBinOpArgs "in" In xs
+    go "!in" xs = decodeBinOpArgs "!in" NotIn xs
     go "case" xs
       | Just {init,last} <- unsnoc xs
       , Just cases <- pairs init
