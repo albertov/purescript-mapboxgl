@@ -2,14 +2,17 @@ module Mapbox.Common where
 
 import Prelude
 
+import Control.Alt ((<|>))
 import Control.Monad.Except (throwError)
-import Data.Foreign (F, ForeignError(..), fail, toForeign, unsafeFromForeign)
+import Data.Either (Either(..))
+import Data.Foreign (F, Foreign, ForeignError(..), fail, toForeign, unsafeFromForeign)
 import Data.Foreign.Class (class Decode, class Encode, decode, encode)
 import Data.Foreign.Internal (readStrMap)
 import Data.Foreign.NullOrUndefined (NullOrUndefined(..), unNullOrUndefined)
 import Data.Int (fromNumber, toNumber)
 import Data.List.NonEmpty (singleton)
 import Data.Maybe (Maybe(..), maybe)
+import Data.Tuple (Tuple(..))
 
 newtype URI = URI String
 
@@ -67,6 +70,8 @@ instance decodeLonLatZoom :: Decode LonLatZoom where
 newtype Color = Color String
 derive newtype instance encodeColor :: Encode Color
 derive newtype instance decodeColor :: Decode Color
+derive newtype instance fromValueColor :: FromValue Color
+derive newtype instance toValueColor :: ToValue Color
 
             
 
@@ -99,6 +104,16 @@ instance decodeAnchor :: Decode Anchor where
     "map" -> pure Map
     "viewport" -> pure Viewport
     _ -> fail (ForeignError "Invalid anchor")
+
+instance anchorToValue :: ToValue Anchor where
+  toValue Viewport = toValue "viewport"
+  toValue Map = toValue "map"
+
+instance anchorFromValue :: FromValue Anchor where
+  fromValue s = fromValue s >>= \s' -> case s' of
+    "map" -> pure Map
+    "viewport" -> pure Viewport
+    _ -> Left "Invalid anchor"
 
 
 newtype Light = Light
@@ -153,6 +168,9 @@ instance decodeRatio :: Decode Ratio where
   decode = maybe (fail (ForeignError "Invalid ratio")) pure
          <=< map toRatio <<< decode
 
+derive newtype instance toValueRatio :: ToValue Ratio
+derive newtype instance fromValueRatio :: FromValue Ratio
+
 toRatio :: Number -> Maybe Ratio
 toRatio n | 0.0 <= n && n <= 1.0 = Just (Ratio n)
 toRatio _ = Nothing
@@ -164,3 +182,74 @@ error :: forall x. String -> F x
 error k = throwError $ singleton
     $ ForeignError
     $ "Expected '" <> k <> "' key"
+
+required :: forall a. Decode a => String -> Foreign -> F a
+required name = maybe (error name) pure
+            <=< (map unNullOrUndefined <<< decode)
+
+
+data Value
+  = String String
+  | StringArray (Array String)
+  | Number Number
+  | NumberArray (Array Number)
+  | Boolean Boolean
+
+class ToValue a where
+  toValue :: a -> Value
+
+instance stringtoValue :: ToValue String where toValue = String
+instance stringArraytoValue :: ToValue (Array String) where toValue = StringArray
+instance numbertoValue :: ToValue Number where toValue = Number
+instance numberArraytoValue :: ToValue (Array Number) where toValue = NumberArray
+instance booleantoValue :: ToValue Boolean where toValue = Boolean
+
+class FromValue a where
+  fromValue :: Value -> Either String a
+
+instance stringfromValue :: FromValue String where
+  fromValue (String s) = Right s
+  fromValue _          = Left "Not a string"
+
+instance stringArrayfromValue :: FromValue (Array String) where
+  fromValue (StringArray s) = Right s
+  fromValue _               = Left "Not a string array"
+
+instance numberfromValue :: FromValue Number where
+  fromValue (Number s) = Right s
+  fromValue _          = Left "Not a number"
+
+instance numberArrayfromValue :: FromValue (Array Number) where
+  fromValue (NumberArray s) = Right s
+  fromValue _               = Left "Not a number array"
+
+instance booleanfromValue :: FromValue Boolean where
+  fromValue (Boolean s) = Right s
+  fromValue _           = Left "Not a boolean"
+
+instance encodeValue :: Encode Value where
+  encode (String      v) = toForeign v
+  encode (StringArray v) = toForeign v
+  encode (Number      v) = toForeign v
+  encode (NumberArray v) = toForeign v
+  encode (Boolean     v) = toForeign v
+
+instance decodeValue :: Decode Value where
+  decode v = String      <$> decode v
+         <|> StringArray <$> decode v
+         <|> Number      <$> decode v
+         <|> NumberArray <$> decode v
+         <|> Boolean     <$> decode v
+                
+
+
+pairs :: forall a. Array a -> Maybe (Array (Tuple a a))
+pairs = pairsImpl Just Nothing Tuple
+
+foreign import pairsImpl
+  :: forall a
+   . (forall r. r -> Maybe r)
+  -> (forall r. Maybe r)
+  -> (forall r s. r -> s -> Tuple r s)
+  -> Array a
+  -> Maybe (Array (Tuple a a))

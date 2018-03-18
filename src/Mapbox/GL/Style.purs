@@ -6,9 +6,10 @@ import Data.Foreign (Foreign, ForeignError(ForeignError), fail, toForeign, unsaf
 import Data.Foreign.Class (class Decode, class Encode, decode, encode)
 import Data.Foreign.Internal (readStrMap)
 import Data.Foreign.NullOrUndefined (NullOrUndefined(..), unNullOrUndefined)
-import Data.Maybe (Maybe, maybe)
+import Data.Maybe (Maybe)
 import Data.StrMap (StrMap)
-import Mapbox.Common (Light, LonLat, Transition, URI, Zoom, error)
+import Data.Traversable (traverse)
+import Mapbox.Common (Light, LonLat, Transition, URI, Zoom, required)
 import Mapbox.GL.Layer (Layer)
 import Mapbox.GL.Source (Source)
 import Prelude (bind, discard, pure, unless, ($), (*>), (<$>), (=<<), (==))
@@ -51,8 +52,7 @@ instance encodeStyle :: Encode Style where
 instance decodeStyle :: Decode Style where
     decode o = readStrMap o *> do
       let m = unsafeFromForeign o
-      version <- maybe (error "version") pure
-             =<< unNullOrUndefined <$> decode m.version
+      version <- required "version" m.version
       unless (version == 8) $
         fail (ForeignError "Expected version 8")
       name <- unNullOrUndefined <$> decode m.name
@@ -62,10 +62,9 @@ instance decodeStyle :: Decode Style where
       bearing <- unNullOrUndefined <$> decode m.bearing
       pitch <- unNullOrUndefined <$> decode m.pitch
       light <- unNullOrUndefined <$> decode m.light
-      sources <- maybe (error "sources") pure
-             =<< unNullOrUndefined <$> decode m.sources
-      layers <- maybe (error "layers") pure
-             =<< unNullOrUndefined <$> decode m.layers
+      sources <- required "sources" m.sources
+      layers <- traverse decode
+            =<< (derefLayers <$> required "layers" m.layers)
       sprite <- unNullOrUndefined <$> decode m.sprite
       glyphs <- unNullOrUndefined <$> decode m.glyphs
       transition <- unNullOrUndefined <$> decode m.transition
@@ -83,3 +82,5 @@ instance decodeStyle :: Decode Style where
                   , transition
                   , layers
                   })
+
+foreign import derefLayers :: Array Foreign -> Array Foreign

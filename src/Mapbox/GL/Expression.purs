@@ -12,7 +12,7 @@ import Data.NonEmpty (NonEmpty(..))
 import Data.StrMap (StrMap)
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(Tuple))
-import Mapbox.Common (Color)
+import Mapbox.Common (class ToValue, Value, pairs, toValue)
 
 data ExpType = StringT | NumberT | BooleanT
 
@@ -26,99 +26,87 @@ instance decodeExpType :: Decode ExpType where
     "string" -> pure StringT
     "number" -> pure NumberT
     "boolean" -> pure BooleanT
-    _ -> fail (ForeignError "Invalid expression type")
+    o -> fail (ForeignError ("Invalid expression type: " <> o))
 
 
-data Value
-  = String String
-  | Number Number
-  | Boolean Boolean
-  | ColorValue Color
 
-instance encodeValue :: Encode Value where
-  encode (String     v) = toForeign v
-  encode (Number     v) = toForeign v
-  encode (Boolean    v) = toForeign v
-  encode (ColorValue v) = encode v
-
-instance decodeValue :: Decode Value where
-  decode v = ColorValue <$> decode v
-         <|> String     <$> decode v
-         <|> Number     <$> decode v
-         <|> Boolean    <$> decode v
 
 data ArrayCheck = ArrayCheck ExpType (Maybe Int)
 
-data Expression
-  = Value      Value -- This node does not exist in the official AST but we need
-                     -- to inject constants into expressions
-  | ArrayExp   Expression (Maybe ArrayCheck)
-  | BooleanExp Expression (Array Expression)
+lit :: forall a. ToValue a => a -> Expr
+lit = Const <<< toValue
+
+data Expr
+  = Const      Value -- This node does not exist in the official AST but we need
+                     -- it to inject constants into Exprs
+  | ArrayExp   Expr (Maybe ArrayCheck)
+  | BooleanExp Expr (Array Expr)
   | LiteralExp (Either (StrMap Value) (Array Value))
-  | NumberExp   Expression (Array Expression)
-  | ObjectExp   Expression (Array Expression)
-  | StringExp   Expression (Array Expression)
-  | ToBoolean   Expression
-  | ToColor     Expression (Array Expression)
-  | ToNumber    Expression (Array Expression)
-  | ToString    Expression
-  | TypeOf      Expression
+  | NumberExp   Expr (Array Expr)
+  | ObjectExp   Expr (Array Expr)
+  | StringExp   Expr (Array Expr)
+  | ToBoolean   Expr
+  | ToColor     Expr (Array Expr)
+  | ToNumber    Expr (Array Expr)
+  | ToString    Expr
+  | TypeOf      Expr
   | GeometryType
   | Id
   | Properties
-  | At            Int Expression
-  | Get           String (Maybe Expression)
-  | Has           String (Maybe Expression)
-  | Length        Expression
-  | Not           Expression
-  | NotEq         Expression Expression
-  | LessThan      Expression Expression
-  | LessThanEq    Expression Expression
-  | Equal         Expression Expression
-  | GreaterThan   Expression Expression
-  | GreaterThanEq Expression Expression
-  | All           Expression Expression (Array Expression)
-  | Any           Expression Expression (Array Expression)
-  | Case          (Array (Tuple Expression Expression)) Expression
-  | Coalesce      Expression Expression (Array Expression)
-  | Match         Expression (Array (Tuple (NonEmpty Array Expression) Expression)) Expression
-  | Interpolate   InterpolationType Expression (Array (Tuple Number Expression))
-  | Step          Expression Expression (Array (Tuple Number Expression))
-  | Let           (Array (Tuple String Expression))
+  | At            Int Expr
+  | Get           String (Maybe Expr)
+  | Has           String (Maybe Expr)
+  | Length        Expr
+  | Not           Expr
+  | NotEq         Expr Expr
+  | LessThan      Expr Expr
+  | LessThanEq    Expr Expr
+  | Equal         Expr Expr
+  | GreaterThan   Expr Expr
+  | GreaterThanEq Expr Expr
+  | All           Expr Expr (Array Expr)
+  | Any           Expr Expr (Array Expr)
+  | In            Expr Expr (Array Expr) --Not defined in the spec but found in the wild
+  | Case          (Array (Tuple Expr Expr)) Expr
+  | Coalesce      Expr Expr (Array Expr)
+  | Match         Expr (Array (Tuple (NonEmpty Array Expr) Expr)) Expr
+  | Interpolate   InterpolationType Expr (Array (Tuple Number Expr))
+  | Step          Expr Expr (Array (Tuple Number Expr))
+  | Let           (Array (Tuple String Expr)) Expr
   | Var           String
-  | Concat        Expression Expression (Array Expression)
-  | Downcase      Expression
-  | Upcase        Expression
-  | Rgb           Expression Expression Expression
-  | Rgba          Expression Expression Expression Expression
-  | ToRgba        Expression
-  | Minus         Expression Expression
-  | Mult          Expression Expression
-  | Div           Expression Expression
-  | Mod           Expression Expression
-  | Exp           Expression Expression
-  | Plus          Expression Expression
-  | Acos          Expression
-  | Asin          Expression
-  | Atan          Expression
-  | Cos           Expression
+  | Concat        Expr Expr (Array Expr)
+  | Downcase      Expr
+  | Upcase        Expr
+  | Rgb           Expr Expr Expr
+  | Rgba          Expr Expr Expr Expr
+  | ToRgba        Expr
+  | Minus         Expr Expr
+  | Mult          Expr Expr
+  | Div           Expr Expr
+  | Mod           Expr Expr
+  | Exp           Expr Expr
+  | Plus          Expr Expr
+  | Acos          Expr
+  | Asin          Expr
+  | Atan          Expr
+  | Cos           Expr
   | E
-  | Ln            Expression
-  | Ln2           Expression
-  | Log10         Expression
-  | Log2          Expression
-  | Max           Expression Expression (Array Expression)
-  | Min           Expression Expression (Array Expression)
+  | Ln            Expr
+  | Ln2           Expr
+  | Log10         Expr
+  | Log2          Expr
+  | Max           Expr Expr (Array Expr)
+  | Min           Expr Expr (Array Expr)
   | Pi
-  | Sin           Expression
-  | Sqrt          Expression
-  | Tan           Expression
+  | Sin           Expr
+  | Sqrt          Expr
+  | Tan           Expr
   | Zoom
   | HeatmapDensity
 
 
-instance encodeExpression :: Encode Expression where
-  encode (Value v) = encode v
+instance encodeExpr :: Encode Expr where
+  encode (Const v) = encode v
   encode (ArrayExp e Nothing) = unOp "array" e
   encode (ArrayExp e (Just (ArrayCheck t Nothing))) = toForeign
     [ toForeign "array", encode e, encode t]
@@ -153,6 +141,7 @@ instance encodeExpression :: Encode Expression where
   encode (GreaterThanEq a b) = binOp ">=" a b
   encode (All a b xs) = binOpArgs "all" a b xs
   encode (Any a b xs) = binOpArgs "any" a b xs
+  encode (In a b xs) = binOpArgs "in" a b xs
   encode (Case cs d) = toForeign  ([toForeign "case"] <> concatMap (\(Tuple c v) -> [encode c, encode v]) cs <> [encode d])
   encode (Coalesce a b xs) = toForeign  ([toForeign "coalesce", encode a, encode b] <> map encode xs)
   encode (Match i cs d) = toForeign  ([toForeign "match", encode i] <> concatMap encodeMatchCase cs <> [encode d])
@@ -162,7 +151,7 @@ instance encodeExpression :: Encode Expression where
     toForeign (   [toForeign "interpolate", encode t, encode e]
                <> concatMap (\(Tuple a b) -> [encode a, encode b]) stops)
   encode (Step i d steps) = toForeign  ([toForeign "step", encode i] <> concatMap (\(Tuple i o) -> [toForeign i, encode o]) steps <> [encode d])
-  encode (Let xs) = toForeign  ([toForeign "tag"] <> concatMap (\(Tuple k v) -> [toForeign k, encode v]) xs)
+  encode (Let xs e) = toForeign  ([toForeign "tag"] <> concatMap (\(Tuple k v) -> [toForeign k, encode v]) xs <> [encode e])
   encode (Var s) = toForeign  ["var", s]
   encode (Concat a b xs) = binOpArgs "concat" a b xs
   encode (Downcase a) = unOp "downcase" a
@@ -194,8 +183,8 @@ instance encodeExpression :: Encode Expression where
   encode Zoom = constant "zoom"
   encode HeatmapDensity = constant "heatmap-density"
 
-instance decodeExpression :: Decode Expression where
-  decode v = decoded <|> Value <$> decode v
+instance decodeExpr :: Decode Expr where
+  decode v = decoded <|> Const <$> decode v
     where
     decoded = decode v >>= \a ->
       case uncons a of
@@ -203,9 +192,9 @@ instance decodeExpression :: Decode Expression where
           tag <- decode head
           go tag tail
         Nothing ->
-          fail (ForeignError "empty expression")
+          fail (ForeignError "empty Expr")
 
-    go :: String -> Array Foreign -> F Expression
+    go :: String -> Array Foreign -> F Expr
     go "array" [e] = ArrayExp <$> decode e <*> pure Nothing
     go "array" [ty, e] = ArrayExp <$> decode e <*> (Just <$> (ArrayCheck <$> decode ty <*> pure Nothing))
     go "array" [ty, l, e] =
@@ -238,6 +227,7 @@ instance decodeExpression :: Decode Expression where
     go ">=" xs = decodeBinOp ">=" GreaterThanEq xs
     go "all" xs = decodeBinOpArgs "all" All xs
     go "any" xs = decodeBinOpArgs "any" Any xs
+    go "in" xs = decodeBinOpArgs "in" In xs
     go "case" xs
       | Just {init,last} <- unsnoc xs
       , Just cases <- pairs init
@@ -269,8 +259,9 @@ instance decodeExpression :: Decode Expression where
       , Just steps <- pairs tail'
       = Step <$> decode input <*> decode out0 <*> traverse decodeTuple steps
     go "let" xs
-      | Just bindings <- pairs xs
-      = Let <$> traverse decodeTuple bindings
+      | Just {init,last} <- unsnoc xs
+      , Just bindings <- pairs init
+      = Let <$> traverse decodeTuple bindings <*> decode last
     go "var" [name] = Var <$> decode name
     go "concat" xs = decodeBinOpArgs "concat" Concat xs
     go "donwcase" xs = decodeUnOp "downcase" Downcase xs
@@ -310,39 +301,39 @@ decodeTuple (Tuple c v) = Tuple <$> decode c <*> decode v
 constant :: String -> Foreign
 constant c = toForeign [c]
 
-decodeConstant :: String -> Expression -> Array Foreign -> F Expression
+decodeConstant :: String -> Expr -> Array Foreign -> F Expr
 decodeConstant _   c [] = pure c
 decodeConstant tag _ _  = fail (ForeignError ("expected no args for " <> tag))
 
-unOp :: String -> Expression -> Foreign
+unOp :: String -> Expr -> Foreign
 unOp op e = toForeign [toForeign op, encode e]
 
-decodeUnOp :: String -> (Expression -> Expression) -> Array Foreign -> F Expression
+decodeUnOp :: String -> (Expr -> Expr) -> Array Foreign -> F Expr
 decodeUnOp _   f [x] = f <$> decode x
 decodeUnOp tag _ _   = fail (ForeignError ("expected one arg for " <> tag))
 
-unOpArgs :: String -> Expression -> Array Expression -> Foreign
+unOpArgs :: String -> Expr -> Array Expr -> Foreign
 unOpArgs op a xs = toForeign ([toForeign op, encode a] <> map encode xs)
 
-decodeUnOpArgs :: String -> (Expression -> Array Expression -> Expression) -> Array Foreign -> F Expression
+decodeUnOpArgs :: String -> (Expr -> Array Expr -> Expr) -> Array Foreign -> F Expr
 decodeUnOpArgs _ f xs
   | Just {head,tail} <- uncons xs = f <$> decode head <*> traverse decode tail
 decodeUnOpArgs tag _ _ =
   fail (ForeignError ("expected at least one arg for " <> tag))
 
 
-binOp :: String -> Expression -> Expression -> Foreign
+binOp :: String -> Expr -> Expr -> Foreign
 binOp op a b = toForeign  [toForeign op, encode a, encode b]
 
-decodeBinOp :: String -> (Expression -> Expression -> Expression) -> Array Foreign -> F Expression
+decodeBinOp :: String -> (Expr -> Expr -> Expr) -> Array Foreign -> F Expr
 decodeBinOp _   f [a,b] = f <$> decode a <*> decode b
 decodeBinOp tag _ _   = fail (ForeignError ("expected two args for " <> tag))
 
 
-binOpArgs :: String -> Expression -> Expression -> Array Expression -> Foreign
+binOpArgs :: String -> Expr -> Expr -> Array Expr -> Foreign
 binOpArgs op a b xs = toForeign ([toForeign op, encode a, encode b] <> map encode xs)
 
-decodeBinOpArgs :: String -> (Expression -> Expression -> Array Expression -> Expression) -> Array Foreign -> F Expression
+decodeBinOpArgs :: String -> (Expr -> Expr -> Array Expr -> Expr) -> Array Foreign -> F Expr
 decodeBinOpArgs _ f xs
   | Just {head:a, tail} <- uncons xs
   , Just {head:b, tail:rest} <- uncons tail
@@ -381,17 +372,4 @@ instance decodeInterpolationType :: Decode InterpolationType where
               [x1,y1,x2,y2] -> pure (CubicBezier {x1,y1,x2,y2})
               _             -> fail (ForeignError "expected 4 arguments to cubic-bezier interpolation")
         unknown -> fail (ForeignError ("unknown interpolation type: " <> unknown))
-    _ -> fail (ForeignError "empty interpolate expression")
-                
-
-
-pairs :: forall a. Array a -> Maybe (Array (Tuple a a))
-pairs = pairsImpl Just Nothing Tuple
-
-foreign import pairsImpl
-  :: forall a
-   . (forall r. r -> Maybe r)
-  -> (forall r. Maybe r)
-  -> (forall r s. r -> s -> Tuple r s)
-  -> Array a
-  -> Maybe (Array (Tuple a a))
+    _ -> fail (ForeignError "empty interpolate Expr")
