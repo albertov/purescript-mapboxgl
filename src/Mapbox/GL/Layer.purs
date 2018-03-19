@@ -103,7 +103,7 @@ data Layer
     , width  :: Maybe (Transitionable (Property Pixels))
     , gapWidth  :: Maybe (Transitionable (Property Pixels))
     , offset  :: Maybe (Transitionable (Property Pixels))
-    , blur  :: Maybe (Transitionable (Property Pixels))
+    , blur  :: Maybe (Transitionable (Property Number))
     , dashArray  :: Maybe (Transitionable (Property DashArray))
     , pattern     :: Maybe (Transitionable (Property SpriteRef))
     }
@@ -156,14 +156,14 @@ data Layer
     , color       :: Maybe (Transitionable (Property Color))
     , haloColor       :: Maybe (Transitionable (Property Color))
     , haloWidth       :: Maybe (Transitionable (Property Pixels))
-    , haloBlur       :: Maybe (Transitionable (Property Pixels))
+    , haloBlur       :: Maybe (Transitionable (Property Number))
     , translate       :: Maybe (Transitionable (Property (XY Translate)))
     , translateAnchor         :: Maybe (Property Anchor)
     , textOpacity :: Maybe (Transitionable (Property Ratio))
     , textColor       :: Maybe (Transitionable (Property Color))
     , textHaloColor       :: Maybe (Transitionable (Property Color))
     , textHaloWidth       :: Maybe (Transitionable (Property Pixels))
-    , textHaloBlur       :: Maybe (Transitionable (Property Pixels))
+    , textHaloBlur       :: Maybe (Transitionable (Property Number))
     , textTranslate       :: Maybe (Transitionable (Property (XY Translate)))
     , textTranslateAnchor         :: Maybe (Property Anchor)
     }
@@ -184,6 +184,75 @@ data Layer
     , contrast     :: Maybe (Transitionable (Property Number)) --TODO ditto
     , fadeDuration     :: Maybe (Property Milliseconds) --TODO ditto
     }
+  | Circle
+    { id          :: String
+    , visibility  :: Maybe (Property Visibility)
+    , metadata    :: Maybe (StrMap Value)
+    , minzoom     :: Maybe Zoom
+    , maxzoom     :: Maybe Zoom
+    , filter      :: Maybe Expr
+    , source      :: SourceRef
+
+    , radius     :: Maybe (Transitionable (Property Pixels))
+    , color     :: Maybe (Transitionable (Property Color))
+    , blur     :: Maybe (Transitionable (Property Number))
+    , opacity     :: Maybe (Transitionable (Property Ratio))
+    , translate       :: Maybe (Transitionable (Property (XY Translate)))
+    , translateAnchor         :: Maybe (Property Anchor)
+    , pitchScale         :: Maybe (Property Anchor)
+    , pitchAlignment         :: Maybe (Property Anchor)
+    , strokeWidth     :: Maybe (Transitionable (Property Pixels))
+    , strokeColor     :: Maybe (Transitionable (Property Color))
+    , strokeOpacity     :: Maybe (Transitionable (Property Ratio))
+    }
+  | FillExtrusion
+    { id          :: String
+    , visibility  :: Maybe (Property Visibility)
+    , metadata    :: Maybe (StrMap Value)
+    , minzoom     :: Maybe Zoom
+    , maxzoom     :: Maybe Zoom
+    , filter      :: Maybe Expr
+    , source      :: SourceRef
+
+    , opacity     :: Maybe (Transitionable (Property Ratio))
+    , color     :: Maybe (Transitionable (Property Color))
+    , translate       :: Maybe (Transitionable (Property (XY Translate)))
+    , translateAnchor         :: Maybe (Property Anchor)
+    , pattern     :: Maybe (Transitionable (Property SpriteRef))
+    , height     :: Maybe (Transitionable (Property Number))
+    , base     :: Maybe (Transitionable (Property Number))
+    }
+  | Heatmap
+    { id          :: String
+    , visibility  :: Maybe (Property Visibility)
+    , metadata    :: Maybe (StrMap Value)
+    , minzoom     :: Maybe Zoom
+    , maxzoom     :: Maybe Zoom
+    , filter      :: Maybe Expr
+    , source      :: SourceRef
+
+    , radius     :: Maybe (Transitionable (Property Pixels))
+    , weight     :: Maybe (Transitionable (Property Number))
+    , intensity     :: Maybe (Transitionable (Property Number))
+    , color     :: Maybe (Property Color)
+    , opacity     :: Maybe (Transitionable (Property Ratio))
+    }
+  | Hillshade
+    { id          :: String
+    , visibility  :: Maybe (Property Visibility)
+    , metadata    :: Maybe (StrMap Value)
+    , minzoom     :: Maybe Zoom
+    , maxzoom     :: Maybe Zoom
+    , filter      :: Maybe Expr
+    , source      :: SourceRef
+
+    , illuminationDirection :: Maybe (Property Degrees)
+    , illuminationAnchor :: Maybe (Property Anchor)
+    , exageration     :: Maybe (Transitionable (Property Ratio))
+    , shadowColor     :: Maybe (Transitionable (Property Color))
+    , highlightColor     :: Maybe (Transitionable (Property Color))
+    , accentColor     :: Maybe (Transitionable (Property Color))
+    }
 
 
 instance encodeLayer :: Encode Layer where
@@ -200,6 +269,18 @@ instance encodeLayer :: Encode Layer where
     { id : toForeign l.id
     }
   encode (Raster l) = toForeign
+    { id : toForeign l.id
+    }
+  encode (Circle l) = toForeign
+    { id : toForeign l.id
+    }
+  encode (FillExtrusion l) = toForeign
+    { id : toForeign l.id
+    }
+  encode (Heatmap l) = toForeign
+    { id : toForeign l.id
+    }
+  encode (Hillshade l) = toForeign
     { id : toForeign l.id
     }
 
@@ -321,6 +402,55 @@ instance decodeLayer :: Decode Layer where
           pure (Raster { id, visibility, metadata, minzoom, maxzoom, filter, source
                        , opacity, hueRotate, brightnessMin, brightnessMax, saturation
                        , contrast, fadeDuration})
+        "circle" -> do
+          source <- decodeSourceRef m
+          radius <- getTransitionableProp paint "circle-radius"
+          color <- getTransitionableProp paint "circle-color"
+          blur <- getTransitionableProp paint "circle-blur"
+          opacity <- getTransitionableProp paint "circle-opacity"
+          translate <- getTransitionableProp paint "circle-translate"
+          translateAnchor <- getProp paint "circle-translate-anchor"
+          pitchScale <- getProp paint "circle-pitch-scale"
+          pitchAlignment <- getProp paint "circle-pitch-alignment"
+          strokeWidth <- getTransitionableProp paint "circle-stroke-width"
+          strokeColor <- getTransitionableProp paint "circle-stroke-color"
+          strokeOpacity <- getTransitionableProp paint "circle-stroke-opacity"
+          pure (Circle { id, visibility, metadata, minzoom, maxzoom, filter, source
+                       , radius, color, blur,opacity,translate,translateAnchor
+                       , pitchScale, pitchAlignment, strokeWidth, strokeColor
+                       , strokeOpacity})
+        "fill-extrusion" -> do
+          source <- decodeSourceRef m
+          opacity <- getTransitionableProp paint "fill-extrusion-opacity"
+          color <- getTransitionableProp paint "fill-extrusion-color"
+          translate <- getTransitionableProp paint "fill-extrusion-translate"
+          translateAnchor <- getProp paint "fill-translate-anchor"
+          pattern <- getTransitionableProp paint  "fill-extrusion-pattern"
+          height <- getTransitionableProp paint  "fill-extrusion-height"
+          base <- getTransitionableProp paint  "fill-extrusion-base"
+          pure (FillExtrusion { id, visibility, metadata, minzoom, maxzoom, filter, source
+                              , opacity, color, translate, translateAnchor, pattern
+                              , height, base})
+        "heatmap" -> do
+          source <- decodeSourceRef m
+          radius <- getTransitionableProp paint "heatmap-radius"
+          weight <- getTransitionableProp paint "heatmap-weight"
+          intensity <- getTransitionableProp paint "heatmap-intensity"
+          color <- getProp paint "heatmap-color"
+          opacity <- getTransitionableProp paint "heatmap-opacity"
+          pure (Heatmap { id, visibility, metadata, minzoom, maxzoom, filter, source
+                        , radius, weight, intensity, color, opacity})
+        "hillshade" -> do
+          source <- decodeSourceRef m
+          illuminationDirection <- getProp paint "hillshade-illumination-direction"
+          illuminationAnchor <- getProp paint "hillshade-illumination-anchor"
+          exageration <- getTransitionableProp paint "hillshade-exaggeration"
+          shadowColor <- getTransitionableProp paint "hillshade-shadow-color"
+          highlightColor <- getTransitionableProp paint "hillshade-hightlight-color"
+          accentColor <- getTransitionableProp paint "hillshade-accent-color"
+          pure (Hillshade { id, visibility, metadata, minzoom, maxzoom, filter, source
+                        , illuminationDirection , illuminationAnchor , exageration
+                        , shadowColor , highlightColor , accentColor})
         unknown -> fail (ForeignError ("Unknown layer type: " <> unknown))
 
 decodeSourceRef
@@ -357,26 +487,6 @@ instance fromValueDashArray :: FromValue DashArray where
   fromValue a = fromValue a >>= \a' ->
     maybe (Left "expected even number of items in dash array") (pure<<<DashArray) (pairs a')
 
-data FunctionType
-  = IdentityFun
-  | ExponentialFun
-  | IntervalFun
-  | CategoricalFun
-
-instance encodeFunctionType :: Encode FunctionType where
-  encode IdentityFun = toForeign "identity"
-  encode ExponentialFun = toForeign "exponential"
-  encode IntervalFun = toForeign "interval"
-  encode CategoricalFun = toForeign "categorical"
-
-instance decodeFunctionType :: Decode FunctionType where
-  decode s = decode s >>= \s' -> case s' of
-    "identity" -> pure IdentityFun
-    "exponential" -> pure ExponentialFun
-    "interval" -> pure IntervalFun
-    "categorical" -> pure CategoricalFun
-    o -> fail (ForeignError ("Invalid function type: " <> o))
-
 data ColorSpace = RGBSpace | LabSpace | HclSpace
 
 instance encodeColorSpace :: Encode ColorSpace where
@@ -393,10 +503,27 @@ instance decodeColorSpace :: Decode ColorSpace where
 
 data Property o
   = Prop Expr
-  | Function
+  | IdentityFun
+    { base     :: Maybe Number
+    , default  :: Maybe Expr
+    , property :: Maybe String
+    , colorSpace :: Maybe ColorSpace
+    }
+  | ExponentialFun
     { stops    :: Stops
     , base     :: Maybe Number
-    , type     :: Maybe FunctionType
+    , default  :: Maybe Expr
+    , colorSpace :: Maybe ColorSpace
+    }
+  | IntervalFun
+    { stops    :: Stops
+    , base     :: Maybe Number
+    , default  :: Maybe Expr
+    , colorSpace :: Maybe ColorSpace
+    }
+  | CategoricalFun
+    { stops    :: Stops
+    , base     :: Maybe Number
     , default  :: Maybe Expr
     , colorSpace :: Maybe ColorSpace
     }
@@ -410,30 +537,59 @@ instance decodeProperty :: Decode (Property o) where
     where
     decodeProp = Prop <$> decode v
     decodeFun o = do
+      type_ <- (fromMaybe "identity" <<< unNullOrUndefined <$> decode o.type)
+      base <- unNullOrUndefined <$> decode o.base
+      default <- unNullOrUndefined <$> decode o.default
+      colorSpace <- unNullOrUndefined <$> decode o.colorSpace
+      case type_ of
+        "identity" -> do
+          property <- unNullOrUndefined <$> decode o.property
+          pure (IdentityFun {base,property,default,colorSpace})
+        "exponential" -> do
+          stops <- decodeStops o
+          pure (ExponentialFun {stops,base,default,colorSpace})
+        "categorical" -> do
+          stops <- decodeStops o
+          pure (CategoricalFun {stops,base,default,colorSpace})
+        "interval" -> do
+          stops <- decodeStops o
+          pure (IntervalFun {stops,base,default,colorSpace})
+        other -> fail (ForeignError ("Unknown function type: " <> other))
+    decodeStops o = do
       property <- unNullOrUndefined <$> decode o.property
-      stops <- case property of
+      case property of
         Just p -> ZoomPropStops p <$> required "stops" o.stops
               <|> PropStops     p <$> required "stops" o.stops
         Nothing -> ZoomStops <$> required "stops" o.stops
-      base <- unNullOrUndefined <$> decode o.base
-      type_ <- unNullOrUndefined <$> decode o.type
-      default <- unNullOrUndefined <$> decode o.default
-      colorSpace <- unNullOrUndefined <$> decode o.colorSpace
-      pure (Function {stops,base,type:type_,default,colorSpace})
 
 instance encodeProperty :: Encode (Property o) where
-  encode (Prop e) = encode e
-  encode (Function f) = toForeign
-    { stops      : encode f.stops
-    , base       : encode (NullOrUndefined f.base)
-    , type       : encode (NullOrUndefined f.type)
-    , default    : encode (NullOrUndefined f.default)
-    , colorSpace : encode (NullOrUndefined f.colorSpace)
-    , property   : case f.stops of
+  encode p = case p of
+    Prop e -> encode e
+    ExponentialFun f -> encodeWithStops "exponential" f
+    CategoricalFun f -> encodeWithStops "categorical" f
+    IntervalFun f -> encodeWithStops "interval" f
+    IdentityFun f -> encodeIdentity f
+
+    where
+      encodeWithStops ty f = toForeign
+        { stops      : encode f.stops
+        , base       : encode (NullOrUndefined f.base)
+        , type       : toForeign ty
+        , default    : encode (NullOrUndefined f.default)
+        , colorSpace : encode (NullOrUndefined f.colorSpace)
+        , property   : encodeProp f.stops
+        }
+      encodeIdentity f = toForeign
+        { base       : encode (NullOrUndefined f.base)
+        , type       : toForeign "identity"
+        , default    : encode (NullOrUndefined f.default)
+        , colorSpace : encode (NullOrUndefined f.colorSpace)
+        , property : encode (NullOrUndefined f.property)
+        }
+      encodeProp stops = case stops of
         PropStops p _ -> encode p
         ZoomPropStops p _ -> encode p
         _                 -> undefined
-    }
 
 data ZoomStop = ZoomStop Zoom Expr
 
