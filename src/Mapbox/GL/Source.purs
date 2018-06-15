@@ -15,7 +15,9 @@ import Data.StrMap (insert)
 import Mapbox.Common (LonLat, URI, Zoom, error, mkURI)
 import Mapbox.TileJSON (TileJSON)
 
-data Source
+type Source = SourceV Unit
+
+data SourceV a
   = Vector    VectorSource
   | Raster    RasterSource
   | RasterDEM RasterSource
@@ -23,8 +25,9 @@ data Source
   | Image     ImageSource
   | Video     VideoSource
   | Canvas    CanvasSource
+  | Vendor    a
 
-instance decodeSource :: Decode Source where
+instance decodeSource :: Decode a => Decode (SourceV a) where
   decode o = readStrMap o *> do
     let s = unsafeFromForeign o
     type_ <- maybe (error "type") pure
@@ -43,10 +46,10 @@ instance decodeSource :: Decode Source where
       "image" -> Image <$> decodeImageSource o
       "video" -> Video <$> decodeVideoSource o
       "canvas" -> Canvas <$> decodeCanvasSource o
-      _ -> fail (ForeignError ("Unknown source type: " <> type_))
+      _ -> Vendor <$> decode o
 
 
-instance encodeSource :: Encode Source where
+instance encodeSource :: Encode a => Encode (SourceV a) where
   encode (Vector src)    = encodeVectorSource  "vector"     src
   encode (Raster src)    = encodeRasterSource  "raster"     src
   encode (RasterDEM src) = encodeRasterSource  "raster-dem" src
@@ -54,6 +57,7 @@ instance encodeSource :: Encode Source where
   encode (Image src)     = encodeImageSource   "image"      src
   encode (Video src)     = encodeVideoSource   "video"      src
   encode (Canvas src)    = encodeCanvasSource  "canvas"     src
+  encode (Vendor src)    = encode                           src
 
 
 

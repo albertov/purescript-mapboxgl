@@ -258,7 +258,7 @@ instance decodeExpr :: Decode Expr where
         Nothing          -> fail (ForeignError "Expected at least on item in label array for match")
       decodeLabelSingle ls = NonEmpty <$> decode ls <*> pure []
     go "interpolate" xs
-      | Just {head:t, tail:tail} <- uncons xs
+      | Just {head:t, tail} <- uncons xs
       , Just {head:e, tail:stops'} <- uncons tail
       , Just stops <- pairs stops'
       = Interpolate <$> decode t
