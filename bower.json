@@ -14,7 +14,7 @@
     "purescript-spec-quickcheck": "^2.0.0",
     "purescript-spec": "^2.0.0",
     "purescript-foreign": "^4.0.1",
-    "purescript-foreign-generic": "meteogrid/purescript-foreign-generic#a2692b1eb124de657b311bf8480b2ad2cebeb86a",
+    "purescript-foreign-generic": "meteogrid/purescript-foreign-generic#81c25bd9c6d91f1dfbb01732937318847743d261",
     "purescript-uri": "^4.2.4",
     "purescript-nonempty": "^4.2.0",
     "purescript-integers": "^3.2.0",
